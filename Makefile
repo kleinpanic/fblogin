@@ -19,6 +19,12 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
+install: $(TARGET)
+	sudo install -m 755 $(TARGET) /usr/local/bin/
+
+uninstall:
+	sudo rm -f /usr/local/bin/$(TARGET)
+
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
 

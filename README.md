@@ -12,6 +12,9 @@ fblogin is a **lightweight, framebuffer-based graphical login manager** designed
 
 This document provides an exhaustive technical breakdown of `fblogin`, covering **system dependencies, low-level memory operations, device interactions, authentication flow, and graphical rendering.**
 
+## Note
+> If you use ubuntu run at ur own risk.
+
 ---
 
 ## **System Dependencies**

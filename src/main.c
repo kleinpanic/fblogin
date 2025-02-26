@@ -2,7 +2,7 @@
 #include "input.h"
 #include "pam_auth.h"
 #include "ui.h"
-
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +14,7 @@
 #include <grp.h>
 #include <sys/mman.h>
 #include "version.h"
+#include <sys/stat.h>
 
 #define MAX_INPUT 256
 
@@ -49,7 +50,6 @@ int try_fingerprint(const char *username) {
     snprintf(cmd, sizeof(cmd), "/usr/bin/fprintd-list %s 2>&1", username);
     FILE *fp = popen(cmd, "r");
     if (!fp) {
-        // Debug print commented out.
         // perror("popen");
         return -1;
     }
@@ -81,12 +81,10 @@ int try_fingerprint(const char *username) {
     sleep(1);
     pid_t pid = fork();
     if (pid < 0) {
-        // Debug print commented out.
         // perror("fork");
         return -1;
     } else if (pid == 0) {
         execl("/usr/bin/fprintd-verify", "fprintd-verify", "-f", finger, username, (char*)NULL);
-        // Debug print commented out.
         // perror("execl fprintd-verify");
         exit(1);
     } else {
@@ -110,13 +108,16 @@ int main(int argc, char **argv) {
     }
     ui_set_cmatrix(use_cmatrix);
     
-    /* Optionally restrict to tty1:
+    // Optionally restrict to tty1:
     char *tty = ttyname(STDIN_FILENO);
-    if (!tty || strstr(tty, "tty1") == NULL) {
-        fprintf(stderr, "This login program must be run on tty1\n");
+    if (!tty) {
+    	fprintf(stderr, "Unable to determine tty name. Exiting.\n");
+    	exit(EXIT_FAILURE);
+    }
+    if (strcmp(tty, "/dev/tty1") != 0) {
+        fprintf(stderr, "fblogin must run only on /dev/tty1. Detected tty: %s. Exiting.\n", tty);
         exit(EXIT_FAILURE);
     }
-    */
     
     if(getuid() != 0) {
         fprintf(stderr, "This program must be run as root\n");
@@ -253,6 +254,19 @@ restart:
         fflush(stdout);
         input_restore();
         fb_close(&fb);
+
+	/* --- fix tty ownership and permissions --- */
+	{
+	     char *tty = ttyname(STDIN_FILENO);
+	     if (tty != NULL) {
+		if (chown(tty, pw->pw_uid, pw->pw_gid) != 0) {
+		   perror("chown tty");
+		}
+	     	if (chmod(tty, 0620) != 0) {
+		   perror("chmod tty");			
+	     	}
+	     }		
+	}
         
         setenv("HOME", pw->pw_dir, 1);
         setenv("USER", pw->pw_name, 1);
@@ -277,21 +291,22 @@ restart:
         
         setsid();
         
+	/* execute user shell as login shell */
+
         char *shell = pw->pw_shell;
         if(!shell || shell[0] == '\0')
             shell = "/bin/sh";
         
-        char shell_name[256] = {0};
-        const char *base = strrchr(shell, '/');
-        if(base)
-            base++;
-        else
-            base = shell;
-        snprintf(shell_name, sizeof(shell_name), "-%s", base);
+        //char shell_name[256] = {0};
+        //const char *base = strrchr(shell, '/');
+        //if(base)
+        //    base++;
+        //else
+        //    base = shell;
+        //snprintf(shell_name, sizeof(shell_name), "-%s", base);
         
-        char *const args[] = { shell, shell_name, NULL };
+        char *const args[] = { shell, "--login", NULL };
         execv(shell, args);
-        
         perror("execv");
         exit(EXIT_FAILURE);
     }
