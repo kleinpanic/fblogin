@@ -1,0 +1,135 @@
+.TH FBLOGIN 1 "2025-02-25" "fblogin v1.0" "User Login Interface"
+.SH NAME
+fblogin \- frame buffer–based graphical login wrapper for Debian systems
+
+.SH SYNOPSIS
+.B fblogin
+[\fI--cmatrix\fR]
+
+.SH DESCRIPTION
+\fbfblogin\fR is a minimalistic login replacement that operates directly on the Linux
+frame buffer. It provides a visually enhanced login experience for tty1 by combining
+Pluggable Authentication Modules (PAM) based user authentication with optional fingerprint
+verification (via fprintd), direct pixel manipulation of the Linux framebuffer, and a custom
+graphical user interface.
+
+The program is designed to be lightweight and modular, interfacing directly with system
+resources such as the frame buffer (/dev/fb0), termios for raw input, and PAM for secure
+authentication. In addition, fblogin offers an optional animated "cmatrix" background and
+displays a Debian spiral (PFP) graphic as a central visual element.
+
+.SH FRAMEBUFFER AND GRAPHICS
+fblogin uses the Linux framebuffer interface to draw its user interface.  It opens the
+framebuffer device, obtains screen resolution and color depth via FBIOGET_VSCREENINFO,
+and maps the framebuffer memory into its address space using mmap(2). Custom routines are
+provided to clear the screen, render individual pixels, draw filled and outline rectangles,
+and render text using an 8×8 bitmap font scaled by a compile-time factor.  The program also
+forces screen updates via msync(2) and FBIOPAN_DISPLAY to ensure that changes are visible
+on all connected displays.
+
+.SH PAM AUTHENTICATION
+The authentication mechanism in fblogin is based on PAM, which allows for pluggable,
+policy-driven authentication.  fblogin initializes a PAM session using pam_start(3) with the
+service name \fBfblogin\fR and supplies a custom conversation function to pass non-interactive
+password input to the underlying PAM modules. Calls to pam_authenticate(3) and
+pam_acct_mgmt(3) ensure that the user credentials and account status are validated. This
+approach abstracts the authentication details and ensures compliance with system security
+policies.
+
+.SH FPRINTD INTEGRATION
+For systems equipped with fingerprint sensors, fblogin integrates with fprintd, the Linux
+fingerprint daemon.  Upon entering a username, the program invokes \fBfprintd-list\fR to
+determine if any fingerprints are enrolled for the user. If fingerprints are detected, it
+then calls \fBfprintd-verify\fR with the appropriate finger parameter.  A successful
+fingerprint verification bypasses the need for password entry.  If fingerprint authentication
+fails or is unavailable, fblogin gracefully falls back to traditional password verification.
+
+.SH USER INTERFACE
+The user interface of fblogin is constructed entirely in software using direct framebuffer
+access.  The interface comprises:
+.IP "Base UI:"
+A background which can be either static (black) or animated (cmatrix-style) when the
+\fB--cmatrix\fR flag is provided.  The base UI also includes a title—"Login for \fI<hostname>\fR"
+—rendered with a bubble-style outline and a centrally positioned Debian spiral (PFP)
+graphic.
+.IP "Input Fields:"
+Outlined (transparent) rectangular boxes for the username and password are rendered below
+the spiral.  The layout is adjustable via hardcoded vertical offsets, and the text is drawn
+using a scaled 8×8 font.
+.IP "Dynamic Behavior:"
+Special keys (Ctrl‑D, Ctrl‑C, etc.) are trapped to allow for input editing and prompt
+restarting.  The program’s internal state is updated dynamically based on user input.
+
+.SH SYSTEM INTEGRATION
+fblogin is intended to replace the default login prompt on tty1.  In modern systems, this
+is typically managed by systemd via getty@tty1.service.  fblogin is designed to be launched
+via a systemd drop‑in override which replaces the default ExecStart with the fblogin binary.
+Upon successful authentication, the program transitions from the root‐managed login
+environment to the authenticated user’s session by performing a series of system calls
+(setuid, setgid, initgroups, setsid, chdir, and finally execv to launch the user’s shell).
+
+.SH SHORTCOMINGS AND FUTURE IMPROVEMENTS
+While fblogin demonstrates a proof-of-concept for a frame buffer–based login system, it has
+certain limitations:
+.IP 1
+The current cmatrix background is rudimentary and may be improved for smoother animation
+and lower visual distraction.
+.IP 1
+The layout and scaling factors are hardcoded and may not be resolution-independent.
+.IP 1
+The program uses the legacy fbdev interface; future iterations may leverage DRM/KMS for
+more robust display control.
+.IP 1
+Error handling and logging are minimal and could be enhanced for production environments.
+.P
+Future work may address these shortcomings, as well as add additional features such as
+multi-factor authentication, theme support, and dynamic layout adaptation.
+
+.SH FILES
+.TP
+\fB/etc/pam.d/fblogin\fR
+A PAM configuration file must be provided to allow fblogin to use PAM for authentication.
+.TP
+\fB/dev/fb0\fR
+The Linux framebuffer device which fblogin uses for rendering.
+.TP
+\fB/usr/bin/fprintd-list\fR and \fB/usr/bin/fprintd-verify\fR
+Utilities used for fingerprint enrollment detection and verification.
+
+.SH SEE ALSO
+.BR pam(3),
+.BR pam_appl(3),
+.BR fprintd(1),
+.BR termios(3),
+.BR mmap(2),
+.BR ioctl(2),
+.BR systemd-getty@.service(5)
+
+.SH DESCRIPTION OF SYSTEM CALLS AND LIBRARIES
+fblogin makes extensive use of Unix system calls and standard C library functions. It uses:
+.IP "- mmap(2)"
+To map the frame buffer memory.
+.IP "- ioctl(2)"
+To query and update display parameters.
+.IP "- termios(3)"
+To manipulate terminal I/O modes for raw input.
+.IP "- fork(2) and execv(3)"
+To launch fingerprint verification processes and to eventually switch user sessions.
+.IP "- PAM (pam_start, pam_authenticate, pam_acct_mgmt)"
+For secure authentication.
+.P
+These calls are integrated in a manner that respects both the traditional Unix philosophy and modern
+systemd-based session management.
+
+.SH BUGS
+While fblogin has been tested on several systems, differences in hardware and driver implementations
+(e.g., fbdev vs. DRM/KMS) may result in unpredictable behavior on some platforms. Users are advised
+to test thoroughly before deploying fblogin as a replacement for the standard login.
+
+.SH AUTHOR ACKNOWLEDGEMENTS
+(Author information omitted; see README for acknowledgements regarding open‑source components such as
+the 8×8 bitmap font.)
+
+.SH COPYRIGHT
+This manual page is distributed in the public domain.
+
