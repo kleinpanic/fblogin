@@ -50,7 +50,6 @@ int try_fingerprint(const char *username) {
     snprintf(cmd, sizeof(cmd), "/usr/bin/fprintd-list %s 2>&1", username);
     FILE *fp = popen(cmd, "r");
     if (!fp) {
-        // perror("popen");
         return -1;
     }
     char buffer[1024];
@@ -81,11 +80,9 @@ int try_fingerprint(const char *username) {
     sleep(1);
     pid_t pid = fork();
     if (pid < 0) {
-        // perror("fork");
         return -1;
     } else if (pid == 0) {
         execl("/usr/bin/fprintd-verify", "fprintd-verify", "-f", finger, username, (char*)NULL);
-        // perror("execl fprintd-verify");
         exit(1);
     } else {
         int status;
@@ -101,7 +98,7 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--cmatrix") == 0) {
             use_cmatrix = 1;
-	} else if (strcmp(argv[i], "--version") == 0) {
+        } else if (strcmp(argv[i], "--version") == 0) {
             printf("fblogin version %s\n", FBLOGIN_VERSION);
             return 0;
         }
@@ -111,8 +108,8 @@ int main(int argc, char **argv) {
     // Optionally restrict to tty1:
     char *tty = ttyname(STDIN_FILENO);
     if (!tty) {
-    	fprintf(stderr, "Unable to determine tty name. Exiting.\n");
-    	exit(EXIT_FAILURE);
+        fprintf(stderr, "Unable to determine tty name. Exiting.\n");
+        exit(EXIT_FAILURE);
     }
     if (strcmp(tty, "/dev/tty1") != 0) {
         fprintf(stderr, "fblogin must run only on /dev/tty1. Detected tty: %s. Exiting.\n", tty);
@@ -142,107 +139,129 @@ int main(int argc, char **argv) {
     signal(SIGQUIT, restart_handler);
     signal(SIGTSTP, ignore_handler);
     
-restart:
-    {
+    /* Outer loop: each iteration represents one full login attempt */
+    while (1) {
         char username[MAX_INPUT] = {0};
         char password[MAX_INPUT] = {0};
         int pos_username = 0;
         int pos_password = 0;
         int auth_success = 0;
-        int in_password_phase = 0;
+        int in_password_phase = 0;     // 0 means still editing username; 1 means editing password.
+        int editing_username = 1;        // same as in_password_phase==0, but we keep it for clarity.
+        int attempted_fingerprint = 0;   // track if fingerprint auth was attempted
         
-        /* Username Input Phase */
-        while (1) {
+        /* Unified input loop for both username and password.
+           The UI redraws both fields each iteration, and Tab toggles which field is active. */
+        while (!auth_success) {
             if (restart_requested) {
                 memset(username, 0, sizeof(username));
-                pos_username = 0;
+                memset(password, 0, sizeof(password));
+                pos_username = pos_password = 0;
                 restart_requested = 0;
                 ui_draw_error(&fb, "Restarting login prompt...");
                 sleep(1);
-            }
-            ui_draw_login(&fb, username, "");
-            int c = input_getchar();
-            if (c == 4) {  // Ctrl-D: clear username
-                memset(username, 0, sizeof(username));
-                pos_username = 0;
-                ui_draw_error(&fb, "Username cleared");
-                sleep(1);
                 continue;
             }
-            if (c == '\n' || c == '\r') {
-                if (pos_username > 0)
-                    break;
-            } else if (c == 127 || c == 8) {
-                if (pos_username > 0)
-                    username[--pos_username] = '\0';
-            } else if (c >= 32 && c <= 126) {
-                if (pos_username < MAX_INPUT - 1) {
-                    username[pos_username++] = (char)c;
-                    username[pos_username] = '\0';
-                }
-            }
-        }
-        
-        /* Fingerprint Authentication Phase */
-        if (is_fprintd_available()) {
-            int fp_ret = try_fingerprint(username);
-            if (fp_ret == 0) {
-                auth_success = 1;
-            } else {
-                ui_draw_error(&fb, "Fingerprint auth failed, fallback to password");
-                sleep(2);
-                in_password_phase = 1;
-            }
-        } else {
-            in_password_phase = 1;
-        }
-        
-        /* Password Input Phase (Fallback) */
-        while (in_password_phase && !auth_success) {
+            
+            // Redraw the UI with both fields. When still in username phase, password may be empty.
             ui_draw_login(&fb, username, password);
             int c = input_getchar();
-            if (c == 4) {  // Ctrl-D: restart (clear both)
+            
+            // Handle Tab: toggle active field.
+            if (c == '\t' || c == 9) {
+                editing_username = !editing_username;
+                if (editing_username)
+                    ui_draw_error(&fb, "Switched to Username Field");
+                else
+                    ui_draw_error(&fb, "Switched to Password Field");
+                continue;
+            }
+            
+            // Handle Ctrl-D: clear inputs and restart this outer iteration.
+            if (c == 4) {
                 memset(username, 0, sizeof(username));
                 memset(password, 0, sizeof(password));
                 pos_username = pos_password = 0;
                 ui_draw_error(&fb, "Restarting login prompt...");
-                sleep(1);
-                goto restart;
+                sleep(0.5);
+                break;  // Break out of the inner loop to restart the outer loop.
             }
+            
+            // Handle newline/Enter key.
             if (c == '\n' || c == '\r') {
-                if (pos_password > 0) {
-                    int ret = authenticate_user(username, password);
-                    if (ret == 0) {
-                        auth_success = 1;
-                        break;
-                    } else {
-                        ui_draw_error(&fb, "Authentication failed. Try again.");
-                        sleep(2);
-                        memset(password, 0, sizeof(password));
-                        pos_password = 0;
+                if (editing_username) {
+                    // If editing username and it is nonempty, finish username phase.
+                    if (pos_username > 0) {
+                        // Optionally, if fingerprint auth is available, try it once.
+                        if (is_fprintd_available() && !attempted_fingerprint) {
+                            int fp_ret = try_fingerprint(username);
+                            attempted_fingerprint = 1;
+                            if (fp_ret == 0) {
+                                auth_success = 1;
+                                break;
+                            } else {
+                                ui_draw_error(&fb, "Fingerprint auth failed, fallback to password");
+                                sleep(2);
+                            }
+                        }
+                        // Switch to password phase.
+                        editing_username = 0;
+                        in_password_phase = 1;
+                    }
+                } else {
+                    // If editing password and password is nonempty, try authentication.
+                    if (pos_password > 0) {
+                        int ret = authenticate_user(username, password);
+                        if (ret == 0) {
+                            auth_success = 1;
+                            break;
+                        } else {
+                            ui_draw_error(&fb, "Authentication failed. Try again.");
+                            sleep(2);
+                            memset(password, 0, sizeof(password));
+                            pos_password = 0;
+                        }
                     }
                 }
-            } else if (c == 127 || c == 8) {
-                if (pos_password > 0)
-                    password[--pos_password] = '\0';
-            } else if (c >= 32 && c <= 126) {
-                if (pos_password < MAX_INPUT - 1) {
-                    password[pos_password++] = (char)c;
-                    password[pos_password] = '\0';
-                }
+                continue;
             }
-        }
+            
+            // Handle backspace.
+            if (c == 127 || c == 8) {
+                if (editing_username) {
+                    if (pos_username > 0)
+                        username[--pos_username] = '\0';
+                } else {
+                    if (pos_password > 0)
+                        password[--pos_password] = '\0';
+                }
+                continue;
+            }
+            
+            // Handle printable characters.
+            if (c >= 32 && c <= 126) {
+                if (editing_username) {
+                    if (pos_username < MAX_INPUT - 1) {
+                        username[pos_username++] = (char)c;
+                        username[pos_username] = '\0';
+                    }
+                } else {
+                    if (pos_password < MAX_INPUT - 1) {
+                        password[pos_password++] = (char)c;
+                        password[pos_password] = '\0';
+                    }
+                }
+                continue;
+            }
+        } // End of unified input loop.
         
-        if (!auth_success) {
-            ui_draw_error(&fb, "Authentication failed.");
-            sleep(2);
-            restore_and_exit(EXIT_FAILURE);
-        }
+        // If we broke out of the input loop without successful auth (e.g. due to Ctrl-D), restart.
+        if (!auth_success)
+            continue;
         
+        /* Authentication was successful; proceed with login. */
         struct passwd *pw = getpwnam(username);
         if (!pw) {
-            // Debug print commented out.
-            // fprintf(stderr, "User not found: %s\n", username);
             restore_and_exit(EXIT_FAILURE);
         }
         
@@ -254,19 +273,19 @@ restart:
         fflush(stdout);
         input_restore();
         fb_close(&fb);
-
-	/* --- fix tty ownership and permissions --- */
-	{
-	     char *tty = ttyname(STDIN_FILENO);
-	     if (tty != NULL) {
-		if (chown(tty, pw->pw_uid, pw->pw_gid) != 0) {
-		   perror("chown tty");
-		}
-	     	if (chmod(tty, 0620) != 0) {
-		   perror("chmod tty");			
-	     	}
-	     }		
-	}
+        
+        /* --- fix tty ownership and permissions --- */
+        {
+            char *tty = ttyname(STDIN_FILENO);
+            if (tty != NULL) {
+                if (chown(tty, pw->pw_uid, pw->pw_gid) != 0) {
+                    perror("chown tty");
+                }
+                if (chmod(tty, 0620) != 0) {
+                    perror("chmod tty");
+                }
+            }
+        }
         
         setenv("HOME", pw->pw_dir, 1);
         setenv("USER", pw->pw_name, 1);
@@ -291,24 +310,14 @@ restart:
         
         setsid();
         
-	/* execute user shell as login shell */
-
         char *shell = pw->pw_shell;
         if(!shell || shell[0] == '\0')
             shell = "/bin/sh";
-        
-        //char shell_name[256] = {0};
-        //const char *base = strrchr(shell, '/');
-        //if(base)
-        //    base++;
-        //else
-        //    base = shell;
-        //snprintf(shell_name, sizeof(shell_name), "-%s", base);
         
         char *const args[] = { shell, "--login", NULL };
         execv(shell, args);
         perror("execv");
         exit(EXIT_FAILURE);
-    }
+    } // End of outer loop.
 }
 
