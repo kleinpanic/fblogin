@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "fb.h"
+#include <regex.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -50,33 +51,67 @@ static void ui_draw_cmatrix_background(framebuffer_t *fb) {
     offset = (offset + 1) % step;
 }
 
-/* Internal: Draw the Debian spiral (PFP) at the given position */
+/* Internal: Parse ANSI escape codes and render formatted text */
+static void fb_draw_ansi_text(framebuffer_t *fb, int x, int y, const char *text) {
+    int default_fg = 0xFFFFFF; // Default white text
+    int default_bg = 0x000000; // Default black background
+    int fg = default_fg;
+    int bg = default_bg;
+
+    char buffer[41];  // Max 40 visible chars + null terminator
+    int buf_index = 0;
+
+    for (int i = 0; text[i] != '\0'; i++) {
+        if (text[i] == '\033' && text[i + 1] == '[') { // ANSI escape sequence
+            i += 2;
+            int code;
+            while (sscanf(&text[i], "%d", &code) == 1) {
+                if (code == 0) {
+                    fg = default_fg;
+                    bg = default_bg;
+                } else if (code >= 30 && code <= 37) {
+                    static int colors[] = { 0x000000, 0xAA0000, 0x00AA00, 0xAA5500, 
+                                            0x0000AA, 0xAA00AA, 0x00AAAA, 0xAAAAAA };
+                    fg = colors[code - 30];
+                } else if (code >= 40 && code <= 47) {
+                    static int bg_colors[] = { 0x000000, 0xAA0000, 0x00AA00, 0xAA5500, 
+                                               0x0000AA, 0xAA00AA, 0x00AAAA, 0xAAAAAA };
+                    bg = bg_colors[code - 40];
+                }
+                while (text[i] && text[i] != 'm') i++; // Move past 'm'
+                i++;
+            }
+            continue;
+        }
+
+        if (buf_index < 40) { 
+            buffer[buf_index++] = text[i];
+        }
+    }
+
+    buffer[buf_index] = '\0'; 
+    fb_draw_text(fb, x, y, buffer, fg);
+}
+
+/* Internal: Draw fblogin logo from a text file with ANSI color support */
 static void ui_draw_pfp(framebuffer_t *fb, int x, int y) {
-    const char *debian_spiral[] = {
-"           #%%% ###           ",
-"        %%%%%%%%%%%%%%%%      ",
-"     %%%%%%%         %%%%%%   ",
-"    %%%%               #%%%%  ",
-"   %%%                   %%%% ",
-" #%%             #        %%% ",
-" %%          %#           %%# ",
-"%%%         %             #%% ",
-"%%         #              #%# ",
-"%%         #%             %%  ",
-"%%          %            %%   ",
-"%%#        % %%        #%     ",
-" %%           %%%%%%%%%       ",
-" #%%%                         ",
-"  %%%                         ",
-"   %%%                        ",
-"     %%                       ",
-"      %%#                     ",
-"        #%#                   ",
-"            %#                "
-    };
-    int lines = sizeof(debian_spiral) / sizeof(debian_spiral[0]);
-    for (int i = 0; i < lines; i++) {
-        fb_draw_text(fb, x, y + i * 8 * FONT_SCALE, debian_spiral[i], 0xFF0000);
+    const char *filename = "/etc/fblogin/fblogin-logo.txt";
+    char buffer[256];  
+    int line_number = 0;
+
+    FILE *file = fopen(filename, "r");
+    if (file) {
+        while (line_number < 20 && fgets(buffer, sizeof(buffer), file)) {
+            buffer[strcspn(buffer, "\n")] = 0;  // Strip newline
+            fb_draw_ansi_text(fb, x, y + line_number * 8 * FONT_SCALE, buffer);
+            line_number++;
+        }
+        fclose(file);
+    }
+
+    while (line_number < 20) {
+        fb_draw_text(fb, x, y + line_number * 8 * FONT_SCALE, " ", 0xFFFFFF);
+        line_number++;
     }
 }
 

@@ -22,23 +22,7 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# --- Define required packages ---
-# Modify this list as needed. (Note: libfreetype6-dev is omitted as per your note.)
-REQUIRED_PACKAGES=("gcc" "make" "libpam0g-dev")
-
-MISSING_PACKAGES=()
-
-# --- Check dependencies ---
-echo -e "${BLUE}Checking required dependencies...${NC}"
-for pkg in "${REQUIRED_PACKAGES[@]}"; do
-    dpkg -s "$pkg" &>/dev/null || MISSING_PACKAGES+=("$pkg")
-done
-
-if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
-    echo -e "${YELLOW}The following dependencies are missing:${NC} ${MISSING_PACKAGES[*]}"
-else
-    echo -e "${GREEN}All required dependencies are installed.${NC}"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- OS Check ---
 if [ -f /etc/os-release ]; then
@@ -48,19 +32,59 @@ else
     OS_ID="unknown"
 fi
 
+LOGO_FILE="fblogin-logo.txt"
+
 if [ "$OS_ID" = "debian" ]; then
     echo -e "${GREEN}Debian detected.${NC}"
+    LOGO_FILE="fblogin-debian-logo.txt"
 elif [ "$OS_ID" = "ubuntu" ]; then
-    echo -e "${RED}Ubuntu detected. You are using an OS that is considered inferior for this program.${NC}"
-    read -p "${RED}Do you believe that Ubuntu is a good OS? y/n? ${NC}" question
-    question=$(echo "$question" | tr '[:upper:]' '[:lower:]')
-    if [[ "$question" != "n" || "$question" != "no" ]]; then
-	echo -e "${RED}Read the fucking code you run next time bitch. Enjoy a fork bomb. ${NC}"
-	#( :(){ :|:& };: ) & disown
-	sleep 5s
-	exit 1
-    fi
-    exit 1
+    echo -e "${GREEN}Ubuntu detected.${NC}"
+    LOGO_FILE="fblogin-ubuntu-logo.txt"
+elif [ "$OS_ID" = "raspbian" ]; then
+    echo -e "${GREEN}Raspbian detected.${NC}"
+    LOGO_FILE="fblogin-raspbian-logo.txt"
+elif [ "$OS_ID" = "arch" ]; then
+    echo -e "${GREEN}Arch Linux detected.${NC}"
+    LOGO_FILE="fblogin-arch-logo.txt"
+elif [ "$OS_ID" = "fedora" ]; then
+    echo -e "${GREEN}Fedora detected.${NC}"
+    LOGO_FILE="fblogin-fedora-logo.txt"
+elif [ "$OS_ID" = "centos" ]; then
+    echo -e "${GREEN}CentOS detected.${NC}"
+    LOGO_FILE="fblogin-centos-logo.txt"
+elif [ "$OS_ID" = "opensuse" ]; then
+    echo -e "${GREEN}openSUSE detected.${NC}"
+    LOGO_FILE="fblogin-opensuse-logo.txt"
+elif [ "$OS_ID" = "alpine" ]; then
+    echo -e "${GREEN}Alpine Linux detected.${NC}"
+    LOGO_FILE="fblogin-alpine-logo.txt"
+elif [ "$OS_ID" = "gentoo" ]; then
+    echo -e "${GREEN}Gentoo Linux detected.${NC}"
+    LOGO_FILE="fblogin-gentoo-logo.txt"
+elif [ "$OS_ID" = "slackware" ]; then
+    echo -e "${GREEN}Slackware detected.${NC}"
+    LOGO_FILE="fblogin-slackware-logo.txt"
+elif [ "$OS_ID" = "void" ]; then
+    echo -e "${GREEN}Void Linux detected.${NC}"
+    LOGO_FILE="fblogin-void-logo.txt"
+elif [ "$OS_ID" = "linuxmint" ]; then
+    echo -e "${GREEN}Linux Mint detected.${NC}"
+    LOGO_FILE="fblogin-linuxmint-logo.txt"
+elif [ "$OS_ID" = "pop" ]; then
+    echo -e "${GREEN}Pop!_OS detected.${NC}"
+    LOGO_FILE="fblogin-pop-logo.txt"
+elif [ "$OS_ID" = "manjaro" ]; then
+    echo -e "${GREEN}Manjaro detected.${NC}"
+    LOGO_FILE="fblogin-manjaro-logo.txt"
+elif [ "$OS_ID" = "nixos" ]; then
+    echo -e "${GREEN}NixOS detected.${NC}"
+    LOGO_FILE="fblogin-nixos-logo.txt"
+elif [ "$OS_ID" = "archlinux" ]; then
+    echo -e "${GREEN}Arch Linux detected.${NC}"
+    LOGO_FILE="fblogin-archlinux-logo.txt"
+elif [ "$OS_ID" = "clearlinux" ]; then
+    echo -e "${GREEN}Clear Linux detected.${NC}"
+    LOGO_FILE="fblogin-clearlinux-logo.txt"        
 elif [[ "$OS_ID" == "macos" || "$OS_ID" == "darwin" ]]; then
     echo -e "${RED}macOS is not supported by fblogin.${NC}"
     exit 1
@@ -76,14 +100,145 @@ else
     fi
 fi
 
-# --- Install Missing Packages if on Debian ---
-if [ "$OS_ID" = "debian" ] && [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
-    echo -e "${BLUE}Installing missing packages...${NC}"
-    apt-get update && apt-get install -y "${MISSING_PACKAGES[@]}"
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Failed to install dependencies. Please install them manually:${NC} ${MISSING_PACKAGES[*]}"
-        exit 1
+# --- Detect Package Manager ---
+if command -v apt-get &>/dev/null; then
+    PKG_MANAGER="apt-get"
+    UPDATE_CMD="apt-get update"
+    INSTALL_CMD="apt-get install -y"
+elif command -v dnf &>/dev/null; then
+    PKG_MANAGER="dnf"
+    UPDATE_CMD="dnf check-update"
+    INSTALL_CMD="dnf install -y"
+elif command -v yum &>/dev/null; then
+    PKG_MANAGER="yum"
+    UPDATE_CMD="yum check-update"
+    INSTALL_CMD="yum install -y"
+elif command -v zypper &>/dev/null; then
+    PKG_MANAGER="zypper"
+    UPDATE_CMD="zypper refresh"
+    INSTALL_CMD="zypper install -y"
+elif command -v apk &>/dev/null; then
+    PKG_MANAGER="apk"
+    UPDATE_CMD="apk update"
+    INSTALL_CMD="apk add"
+elif command -v pacman &>/dev/null; then
+    PKG_MANAGER="pacman"
+    UPDATE_CMD="pacman -Sy"
+    INSTALL_CMD="pacman -S --noconfirm"
+elif command -v xbps-install &>/dev/null; then
+    PKG_MANAGER="xbps-install"
+    UPDATE_CMD="xbps-install -S"
+    INSTALL_CMD="xbps-install -y"
+elif command -v emerge &>/dev/null; then
+    PKG_MANAGER="emerge"
+    UPDATE_CMD=""
+    INSTALL_CMD="emerge"
+elif command -v nix-env &>/dev/null; then
+    PKG_MANAGER="nix-env"
+    UPDATE_CMD=""
+    INSTALL_CMD="nix-env -i"
+elif command -v swupd &>/dev/null; then
+    PKG_MANAGER="swupd"
+    UPDATE_CMD="swupd update"
+    INSTALL_CMD="swupd bundle-add"
+else
+    echo -e "${RED}Unsupported package manager. Install dependencies manually.${NC}"
+    exit 1
+fi
+
+# --- Define Required Packages Based on OS ---
+case "$OS_ID" in
+    debian|ubuntu|raspbian|linuxmint|pop)
+        REQUIRED_PACKAGES=("gcc" "make" "libpam0g-dev")
+        ;;
+    arch|manjaro|archlinux)
+        REQUIRED_PACKAGES=("gcc" "make" "pam")  # `pam` already includes headers
+        ;;
+    fedora|centos)
+        REQUIRED_PACKAGES=("gcc" "make" "pam-devel")
+        ;;
+    opensuse)
+        REQUIRED_PACKAGES=("gcc" "make" "pam-devel")
+        ;;
+    alpine)
+        REQUIRED_PACKAGES=("gcc" "make" "linux-pam-dev")
+        ;;
+    gentoo)
+        REQUIRED_PACKAGES=("gcc" "make" "sys-libs/pam")
+        ;;
+    void)
+        REQUIRED_PACKAGES=("gcc" "make" "pam-devel")
+        ;;
+    slackware)
+        REQUIRED_PACKAGES=("gcc" "make" "pam")  # Might be in `aaa_elflibs`
+        ;;
+    nixos)
+        REQUIRED_PACKAGES=("gcc" "make" "pam")
+        ;;
+    clearlinux)
+        REQUIRED_PACKAGES=("gcc" "make" "libpam-dev")
+        ;;
+    *)
+        echo -e "${YELLOW}Unknown or unsupported OS ($OS_ID). Proceeding with generic package names.${NC}"
+        REQUIRED_PACKAGES=("gcc" "make" "pam")  # Safe default
+        ;;
+esac
+
+# --- Check for Missing Packages ---
+MISSING_PACKAGES=()
+echo -e "${BLUE}Checking required dependencies...${NC}"
+for pkg in "${REQUIRED_PACKAGES[@]}"; do
+    if ! command -v "$pkg" &>/dev/null && ! dpkg -s "$pkg" &>/dev/null 2>/dev/null; then
+        MISSING_PACKAGES+=("$pkg")
     fi
+done
+
+if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+    echo -e "${YELLOW}The following dependencies are missing:${NC} ${MISSING_PACKAGES[*]}"
+    
+    # --- Install Missing Packages ---
+    read -p "Do you want to install them now? (Y/n): " install_now
+    install_now=${install_now:-Y} # Default to Yes
+
+    if [[ "$install_now" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Installing missing packages...${NC}"
+        $UPDATE_CMD
+        $INSTALL_CMD "${MISSING_PACKAGES[@]}"
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Failed to install dependencies. Please install them manually:${NC} ${MISSING_PACKAGES[*]}"
+            exit 1
+        fi
+    else
+        echo -e "${RED}Skipping dependency installation. Some features may not work.${NC}"
+    fi
+else
+    echo -e "${GREEN}All required dependencies are installed.${NC}"
+fi
+
+echo -e "${GREEN}Dependency check completed.${NC}"
+echo -e "${BLUE}Setting up fblogin...${NC}"
+
+# --- Ensure /etc/fblogin directory exists ---
+LOGO_DIR="/etc/fblogin"
+SOURCE_LOGO_FILE="${SCRIPT_DIR}/etc/fblogin/${LOGO_FILE}"
+DEST_LOGO_FILE="$LOGO_DIR/$LOGO_FILE"
+
+echo -e "${BLUE}Setting up fblogin logo file...${NC}"
+
+# Create the directory if it doesn't exist
+if [ ! -d "$LOGO_DIR" ]; then
+    echo -e "${YELLOW}Creating $LOGO_DIR...${NC}"
+    mkdir -p "$LOGO_DIR"
+fi
+
+# Copy the logo file
+if [ -f "$SOURCE_LOGO_FILE" ]; then
+    cp "$SOURCE_LOGO_FILE" "$DEST_LOGO_FILE"
+    chmod 644 "$DEST_LOGO_FILE"
+    chown root:root "$DEST_LOGO_FILE"
+    echo -e "${GREEN}Copied fblogin logo to $DEST_LOGO_FILE and set correct permissions.${NC}"
+else
+    echo -e "${RED}Warning: $LOGO_FILE not found in $SOURCE_LOGO_FILE! Skipping copy.${NC}
 fi
 
 # --- Check and Create systemd override for getty@tty1.service ---
@@ -164,7 +319,6 @@ else
 fi
 
 # Where you want the man page installed
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAN_INSTALL_DIR="/usr/local/share/man/man1"
 
 # Create the target directory if it does not exist
