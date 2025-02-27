@@ -163,6 +163,25 @@ else
     echo -e "${GREEN}fblogin binary found at /usr/local/bin/fblogin.${NC}"
 fi
 
+# Where you want the man page installed
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAN_INSTALL_DIR="/usr/local/share/man/man1"
+
+# Create the target directory if it does not exist
+if [ ! -d "$MAN_INSTALL_DIR" ]; then
+  echo "Creating directory $MAN_INSTALL_DIR..."
+  mkdir -p "$MAN_INSTALL_DIR"
+fi
+
+# Copy or install the fblogin.1 man page into the man1 directory
+echo "Installing fblogin.1 from ${SCRIPT_DIR} to ${MAN_INSTALL_DIR}..."
+
+# Option 2 (preferred): Using install for proper permissions (e.g. 644)
+install -m 644 "${SCRIPT_DIR}/fblogin.1" "$MAN_INSTALL_DIR"
+
+echo "Installation complete!"
+
+
 # --- Final Instructions ---
 echo -e "${GREEN}Setup is complete. fblogin has been configured as the login manager for tty1.${NC}"
 echo -e "${YELLOW}If you wish to revert the changes, remove the directory:${NC} ${OVERRIDE_DIR}"
