@@ -87,6 +87,90 @@ The core functionality of `fblogin` relies on direct **syscalls** for process co
 
 ---
 
+## Setup and Installation 
+1. **Clone or Download the repo**:
+```Bash
+git clone https://github.com/yourusername/fblogin.git
+cd fblogin
+```
+
+2. **Install required Dependencies**:
+on Debian you might install PAM and fprintd with: 
+```Bash
+sudo apt-get update
+sudo apt-get install libpam0g-dev fprintd libfprint-dev
+```
+
+3. **Build the project**
+The project comes with a make file and a bash script 
+```Bash
+make
+```
+
+For direct installation 
+```Bash
+make install
+```
+
+For uninstallation 
+```Bash
+make uninstall
+```
+
+4. Ensure your computer environment is propely setup 
+```Bash 
+./setup.sh
+```
+
+### Note 
+> Please create issues if any of these steps produce errors 
+
+> For your consideration: The program should be ran as root because it needs access to /dev/fb0 but ultimately it is designed to be ran by systemd
+> For your consideration: The program has a strict isolation aspect that limits the running of this program to /dev/tty1 only. This can be changed in the code base to be a different tty or entirely commented out to run on all ttys and truly override the login command for your entire computer (NOT RECOMMENDED. THIS CODE IS STILL IN DEVELOPMENT). 
+
+---
+
+## Usage
+1. **Switch to TTY1:**
+fblogin is configured to run only on /dev/tty1. You can switch to tty1 with:
+
+```bash
+Ctrl+Alt+F1
+```
+
+2. **Run fblogin as Root:**
+```bash
+    sudo ./fblogin
+``` 
+
+3. **Login Process:** 
+* Username Entry:
+	* The login screen initially displays an input field for the username. Type your username.
+* Toggle Fields with Tab:
+	* Press Tab to switch between the username and password fields.
+* Fingerprint Authentication:
+	* If a fingerprint reader is detected (fprintd-list is available), the program will attempt fingerprint authentication as soon as the username is entered.
+        * If fingerprint authentication fails, it falls back to the password entry.
+* Password Entry:
+        * When editing the password field, type your password and press Enter to authenticate.
+* Ctrl‑D:
+        * Pressing Ctrl‑D will clear both fields and restart the login prompt.
+* Post-Authentication:
+	* On successful authentication, fblogin will adjust tty permissions, set environment variables (such as HOME, USER, SHELL), and then launch the user's shell as a login shell.
+
+### Troubleshooting
+
+1. Framebuffer Initialization:
+If you encounter an error initializing the framebuffer (/dev/fb0), ensure your user has the correct permissions or that the framebuffer device exists.
+
+2. Input Device Issues:
+If no input is detected, verify that the keyboard input library is properly set up and that /dev/tty1 is active.
+
+3. Fingerprint Reader Issues:
+Make sure that fprintd-list and fprintd-verify are installed, executable, and that your fingerprint sensor is supported by the fprintd library.
+
+---
+
 ## **System Architecture**
 
 ### **1. Authentication Flow (PAM + fprintd)**
