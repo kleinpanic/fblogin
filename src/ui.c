@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "fb.h"
+#include <fcntl.h>
 #include <regex.h>
 #include <stdio.h>
 #include <string.h>
@@ -64,37 +65,50 @@ static void fb_draw_ansi_text(framebuffer_t *fb, int x, int y, const char *text)
     int buf_index = 0;
 
     for (int i = 0; text[i] != '\0'; i++) {
-        if (text[i] == '\033' && text[i + 1] == '[') { // ANSI escape sequence
+        if (text[i] == '\x1B' && text[i + 1] == '[') { // ANSI escape sequence
             i += 2;
+            char ansi_code[10];
+            int j = 0;
+            while (text[i] != 'm' && j < (int)(sizeof(ansi_code) - 1)) {
+                ansi_code[j++] = text[i++];
+            }
+            ansi_code[j] = '\0';
+            i++; // Move past 'm'
+
             int code;
-            while (sscanf(&text[i], "%d", &code) == 1) {
+            char *token = strtok(ansi_code, ";");
+            while (token != NULL) {
+                sscanf(token, "%d", &code);
                 if (code == 0) {
                     fg = default_fg;
                     bg = default_bg;
                 } else if (code >= 30 && code <= 37) {
-                    static int colors[] = { 0x000000, 0xAA0000, 0x00AA00, 0xAA5500, 
+                    static int colors[] = { 0x000000, 0xAA0000, 0x00AA00, 0xAA5500,
                                             0x0000AA, 0xAA00AA, 0x00AAAA, 0xAAAAAA };
                     fg = colors[code - 30];
                 } else if (code >= 40 && code <= 47) {
-                    static int bg_colors[] = { 0x000000, 0xAA0000, 0x00AA00, 0xAA5500, 
+                    static int bg_colors[] = { 0x000000, 0xAA0000, 0x00AA00, 0xAA5500,
                                                0x0000AA, 0xAA00AA, 0x00AAAA, 0xAAAAAA };
                     bg = bg_colors[code - 40];
                 }
-                while (text[i] && text[i] != 'm') i++; // Move past 'm'
-                i++;
+                token = strtok(NULL, ";");
             }
             continue;
         }
 
-        if (buf_index < 40) { 
-            buffer[buf_index++] = text[i];
+        if (buf_index < 40 - 1) { 
+                         buffer[buf_index++] = text[i];
         }
     }
 
-    buffer[buf_index] = '\0'; 
-    fb_draw_rect(fb, x, y, buf_index * 8 * FONT_SCALE, 8 * FONT_SCALE, bg); // Draw background first
-    fb_draw_text(fb, x, y, buffer, fg, bg); // Draw text on top
-}
+    buffer[buf_index] = '\0';
+
+    // Draw each character with its background
+    for (int i = 0; i < buf_index; i++) {
+        fb_draw_rect(fb, x + i * 8 * FONT_SCALE, y, 8 * FONT_SCALE, 8 * FONT_SCALE, bg); // Draw background
+        fb_draw_text(fb, x + i * 8 * FONT_SCALE, y, &buffer[i], fg, bg); // Draw text on top
+    }
+}                                                                                        
 
 /* Internal: Draw fblogin logo from a text file with ANSI color support */
 static void ui_draw_pfp(framebuffer_t *fb, int x, int y) {
@@ -106,15 +120,25 @@ static void ui_draw_pfp(framebuffer_t *fb, int x, int y) {
     if (file) {
         while (line_number < 20 && fgets(buffer, sizeof(buffer), file)) {
             buffer[strcspn(buffer, "\n")] = 0;  // Strip newline
+
+            // Replace \033 with the actual escape character
+            for (int i = 0; buffer[i] != '\0'; i++) {
+                if (buffer[i] == '\\' && buffer[i + 1] == '0' && buffer[i + 2] == '3' && buffer[i + 3] == '3') {
+                    buffer[i] = '\x1B';
+                    memmove(&buffer[i + 1], &buffer[i + 4], strlen(&buffer[i + 4]) + 1);
+                }
+            }
+
             fb_draw_ansi_text(fb, x, y + line_number * 8 * FONT_SCALE, buffer);
             line_number++;
         }
         fclose(file);
-    }
-
-    while (line_number < 20) {
-        fb_draw_text(fb, x, y + line_number * 8 * FONT_SCALE, " ", 0xFFFFFF, 0x000000);
-        line_number++;
+    } else {
+        // Handle file open error
+	char error_message[256];
+        snprintf(error_message, sizeof(error_message), "Error: Could not open file %s", filename);
+        // Draw the error message on the screen
+        fb_draw_text(fb, x - 200, y, error_message, 0xFF0000, 0x000000); // Red text on black background
     }
 }
 
@@ -145,21 +169,9 @@ static void ui_draw_base(framebuffer_t *fb, int base_offset_y) {
         snprintf(hostname, sizeof(hostname), "Unknown");
     }
 
-    // Get IP address
-    struct hostent *he;
-    struct in_addr **addr_list;
-    char ip[INET_ADDRSTRLEN] = {0};
-
-    if ((he = gethostbyname(hostname)) != NULL) {
-        addr_list = (struct in_addr **)he->h_addr_list;
-        if (addr_list[0] != NULL) {
-            strncpy(ip, inet_ntoa(*addr_list[0]), INET_ADDRSTRLEN);
-        }
-    }
-
     // Draw title with hostname and IP
     char title[256];
-    snprintf(title, sizeof(title), "Login %s (%s)", hostname, ip);
+    snprintf(title, sizeof(title), "Login %s", hostname);
     int title_width = strlen(title) * 8 * FONT_SCALE;
     int title_x = (fb->width - title_width) / 2;
     int title_y = base_offset_y; 
