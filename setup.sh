@@ -34,70 +34,51 @@ fi
 
 LOGO_FILE="fblogin-logo.txt"
 
-if [ "$OS_ID" = "debian" ]; then
-    echo -e "${GREEN}Debian detected.${NC}"
-    LOGO_FILE="fblogin-debian-logo.txt"
-elif [ "$OS_ID" = "ubuntu" ]; then
-    echo -e "${GREEN}Ubuntu detected.${NC}"
-    LOGO_FILE="fblogin-ubuntu-logo.txt"
-elif [ "$OS_ID" = "raspbian" ]; then
-    echo -e "${GREEN}Raspbian detected.${NC}"
-    LOGO_FILE="fblogin-raspbian-logo.txt"
-elif [ "$OS_ID" = "arch" ]; then
-    echo -e "${GREEN}Arch Linux detected.${NC}"
-    LOGO_FILE="fblogin-arch-logo.txt"
-elif [ "$OS_ID" = "fedora" ]; then
-    echo -e "${GREEN}Fedora detected.${NC}"
-    LOGO_FILE="fblogin-fedora-logo.txt"
-elif [ "$OS_ID" = "centos" ]; then
-    echo -e "${GREEN}CentOS detected.${NC}"
-    LOGO_FILE="fblogin-centos-logo.txt"
-elif [ "$OS_ID" = "opensuse" ]; then
-    echo -e "${GREEN}openSUSE detected.${NC}"
-    LOGO_FILE="fblogin-opensuse-logo.txt"
-elif [ "$OS_ID" = "alpine" ]; then
-    echo -e "${GREEN}Alpine Linux detected.${NC}"
-    LOGO_FILE="fblogin-alpine-logo.txt"
-elif [ "$OS_ID" = "gentoo" ]; then
-    echo -e "${GREEN}Gentoo Linux detected.${NC}"
-    LOGO_FILE="fblogin-gentoo-logo.txt"
-elif [ "$OS_ID" = "slackware" ]; then
-    echo -e "${GREEN}Slackware detected.${NC}"
-    LOGO_FILE="fblogin-slackware-logo.txt"
-elif [ "$OS_ID" = "void" ]; then
-    echo -e "${GREEN}Void Linux detected.${NC}"
-    LOGO_FILE="fblogin-void-logo.txt"
-elif [ "$OS_ID" = "linuxmint" ]; then
-    echo -e "${GREEN}Linux Mint detected.${NC}"
-    LOGO_FILE="fblogin-linuxmint-logo.txt"
-elif [ "$OS_ID" = "pop" ]; then
-    echo -e "${GREEN}Pop!_OS detected.${NC}"
-    LOGO_FILE="fblogin-pop-logo.txt"
-elif [ "$OS_ID" = "manjaro" ]; then
-    echo -e "${GREEN}Manjaro detected.${NC}"
-    LOGO_FILE="fblogin-manjaro-logo.txt"
-elif [ "$OS_ID" = "nixos" ]; then
-    echo -e "${GREEN}NixOS detected.${NC}"
-    LOGO_FILE="fblogin-nixos-logo.txt"
-elif [ "$OS_ID" = "archlinux" ]; then
-    echo -e "${GREEN}Arch Linux detected.${NC}"
-    LOGO_FILE="fblogin-archlinux-logo.txt"
-elif [ "$OS_ID" = "clearlinux" ]; then
-    echo -e "${GREEN}Clear Linux detected.${NC}"
-    LOGO_FILE="fblogin-clearlinux-logo.txt"        
-elif [[ "$OS_ID" == "macos" || "$OS_ID" == "darwin" ]]; then
-    echo -e "${RED}macOS is not supported by fblogin.${NC}"
+echo -e "${YELLOW}Your OS ($OS_ID).${NC}"
+
+# Define a function to handle OS-specific logic
+handle_os() {
+    local os_id=$1
+    case $os_id in
+        debian|ubuntu|raspbian|linuxmint|pop)
+            echo -e "${GREEN}${os_id^} detected.${NC}"
+            LOGO_FILE="fblogin-${os_id}-logo.txt"
+            ;;
+        arch|archlinux|manjaro)
+            echo -e "${GREEN}Arch Linux detected.${NC}"
+            LOGO_FILE="fblogin-arch-logo.txt"
+            ;;
+        fedora|centos|opensuse|alpine|gentoo|slackware|void|nixos|clearlinux)
+            echo -e "${GREEN}${os_id^} detected.${NC}"
+            LOGO_FILE="fblogin-${os_id}-logo.txt"
+            ;;
+        macos|darwin)
+            echo -e "${RED}macOS is not supported by fblogin.${NC}"
+            exit 1
+            ;;
+        windows)
+            echo -e "${RED}Windows is not supported by fblogin.${NC}"
+            exit 1
+            ;;
+        *)
+            echo -e "${YELLOW}Warning: Your OS ($OS_ID) may not be fully supported by fblogin.${NC}"
+            echo -e -n "Do you wish to proceed? (Y/n): " 
+            read proceed
+            if [[ ! "$proceed" =~ ^[Yy] ]]; then
+                echo -e "${RED}Aborting installation.${NC}"
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+# Call the function with the detected OS ID
+handle_os "$OS_ID"
+
+# Check if the logo file exists
+if [ ! -f "$SCRIPT_DIR/etc/fblogini/$LOGO_FILE" ]; then
+    echo -e "${RED}Logo file $LOGO_FILE not found.${NC}"
     exit 1
-elif [[ "$OS_ID" == "windows" ]]; then
-    echo -e "${RED}Windows is not supported by fblogin.${NC}"
-    exit 1
-else
-    echo -e "${YELLOW}Warning: Your OS ($OS_ID) may not be fully supported by fblogin.${NC}"
-    read -p "Do you wish to proceed? (Y/n): " proceed
-    if [[ ! "$proceed" =~ ^[Yy] ]]; then
-        echo -e "${RED}Aborting installation.${NC}"
-        exit 1
-    fi
 fi
 
 # --- Detect Package Manager ---
@@ -194,10 +175,11 @@ for pkg in "${REQUIRED_PACKAGES[@]}"; do
 done
 
 if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
-    echo -e "${YELLOW}The following dependencies are missing:${NC} ${MISSING_PACKAGES[*]}"
+    echo -e "${YELLOW}The following dependencies are missing:${NC} ${MISSING_PACKAGES[*]}${NC}"
     
     # --- Install Missing Packages ---
-    read -p "Do you want to install them now? (Y/n): " install_now
+    echo -e -n "Do you want to install them now? (Y/n): " 
+    read install_now
     install_now=${install_now:-Y} # Default to Yes
 
     if [[ "$install_now" =~ ^[Yy]$ ]]; then
@@ -249,7 +231,7 @@ if [ ! -d "$OVERRIDE_DIR" ]; then
 	echo -e "${RED}This is undoable by removing the getty@tty1.service.d/override.conf file.${NC}"
 
 	while true; do
-        	echo -e -n "${RED}Proceed? (y/n) ${NC}" 
+        echo -e -n "Proceed? (y/n) " 
 		read proceed
         	proceed=$(echo "$proceed" | tr '[:upper:]' '[:lower:]')  # Convert to lowercase
 
