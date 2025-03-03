@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <linux/fb.h>
+#include <arpa/inet.h>
 
 #ifndef FONT_SCALE
 #define FONT_SCALE 2
@@ -97,7 +98,7 @@ static void fb_draw_ansi_text(framebuffer_t *fb, int x, int y, const char *text)
 /* Internal: Draw fblogin logo from a text file with ANSI color support */
 static void ui_draw_pfp(framebuffer_t *fb, int x, int y) {
     const char *filename = "/etc/fblogin/fblogin-logo.txt";
-    char buffer[256];  
+    char buffer[256];
     int line_number = 0;
 
     FILE *file = fopen(filename, "r");
@@ -129,27 +130,45 @@ static void ui_draw_bubble_text(framebuffer_t *fb, int x, int y, const char *tex
     fb_draw_text(fb, x, y, text, color, 0x000000);
 }
 
-/* Internal: Draw the base UI (background, title, and Debian spiral) */
+/* Internal: Draw the base UI (background, title, and logo) */
 static void ui_draw_base(framebuffer_t *fb, int base_offset_y) {
     if (ui_use_cmatrix) {
         ui_draw_cmatrix_background(fb);
     } else {
         fb_clear(fb, 0x000000);
     }
+
     char hostname[128] = {0};
     gethostname(hostname, sizeof(hostname));
+    if (strlen(hostname) == 0) {
+        snprintf(hostname, sizeof(hostname), "Unknown");
+    }
+
+    // Get IP address
+    struct hostent *he;
+    struct in_addr **addr_list;
+    char ip[INET_ADDRSTRLEN] = {0};
+
+    if ((he = gethostbyname(hostname)) != NULL) {
+        addr_list = (struct in_addr **)he->h_addr_list;
+        if (addr_list[0] != NULL) {
+            strncpy(ip, inet_ntoa(*addr_list[0]), INET_ADDRSTRLEN);
+        }
+    }
+
+    // Draw title with hostname and IP
     char title[256];
-    snprintf(title, sizeof(title), "Login for %s", hostname);
+    snprintf(title, sizeof(title), "Login %s", hostname, ip[0] ? ip : "");
     int title_width = strlen(title) * 8 * FONT_SCALE;
     int title_x = (fb->width - title_width) / 2;
     int title_y = base_offset_y; 
     ui_draw_bubble_text(fb, title_x, title_y, title, 0xFFFFFF, 0x000000);
     
-    // Draw Debian spiral below title (position adjusted to stay on frame for fingerprint and welcome)
-    int spiral_width = 29 * 8 * FONT_SCALE;
-    int spiral_x = (fb->width - spiral_width) / 2;
-    int spiral_y = title_y + 60;  // moved lower
-    ui_draw_pfp(fb, spiral_x, spiral_y);
+    // Draw Debian logo below title (position adjusted to stay on frame for fingerprint and welcome)
+    int logo_width = 29 * 8 * FONT_SCALE;
+    int logo_x = (fb->width - logo_width) / 2;
+    int logo_y = title_y + 60;  // moved lower
+    ui_draw_pfp(fb, logo_x, logo_y);
 }
 
 /* Public: Draw login screen with text boxes (moved lower) */
