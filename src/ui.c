@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <linux/fb.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 
 #ifndef FONT_SCALE
@@ -158,7 +159,7 @@ static void ui_draw_base(framebuffer_t *fb, int base_offset_y) {
 
     // Draw title with hostname and IP
     char title[256];
-    snprintf(title, sizeof(title), "Login %s", hostname, ip[0] ? ip : "");
+    snprintf(title, sizeof(title), "Login %s (%s)", hostname, ip);
     int title_width = strlen(title) * 8 * FONT_SCALE;
     int title_x = (fb->width - title_width) / 2;
     int title_y = base_offset_y; 
