@@ -76,7 +76,7 @@ handle_os() {
 handle_os "$OS_ID"
 
 # Check if the logo file exists
-if [ ! -f "$SCRIPT_DIR/etc/fblogini/$LOGO_FILE" ]; then
+if [ ! -f "$SCRIPT_DIR/etc/fblogin/$LOGO_FILE" ]; then
     echo -e "${RED}Logo file $LOGO_FILE not found.${NC}"
     exit 1
 fi
@@ -203,7 +203,7 @@ echo -e "${BLUE}Setting up fblogin...${NC}"
 # --- Ensure /etc/fblogin directory exists ---
 LOGO_DIR="/etc/fblogin"
 SOURCE_LOGO_FILE="${SCRIPT_DIR}/etc/fblogin/${LOGO_FILE}"
-DEST_LOGO_FILE="$LOGO_DIR/$LOGO_FILE"
+DEST_LOGO_FILE="$LOGO_DIR/fblogin-logo.txt"
 
 echo -e "${BLUE}Setting up fblogin logo file...${NC}"
 
