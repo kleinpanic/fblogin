@@ -20,7 +20,7 @@ void fb_clear(framebuffer_t *fb, uint32_t color);
 void fb_draw_pixel(framebuffer_t *fb, int x, int y, uint32_t color);
 void fb_draw_rect(framebuffer_t *fb, int x, int y, int w, int h, uint32_t color);
 void fb_draw_rect_outline(framebuffer_t *fb, int x, int y, int w, int h, uint32_t color);
-void fb_draw_text(framebuffer_t *fb, int x, int y, const char *text, uint32_t color);
+void fb_draw_text(framebuffer_t *fb, int x, int y, const char *text, uint32_t fg_color, uint32_t bg_color);
 
 #endif
 

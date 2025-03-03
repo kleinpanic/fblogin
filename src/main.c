@@ -146,7 +146,6 @@ int main(int argc, char **argv) {
         int pos_username = 0;
         int pos_password = 0;
         int auth_success = 0;
-        int in_password_phase = 0;     // 0 means still editing username; 1 means editing password.
         int editing_username = 1;        // same as in_password_phase==0, but we keep it for clarity.
         int attempted_fingerprint = 0;   // track if fingerprint auth was attempted
         
@@ -206,7 +205,6 @@ int main(int argc, char **argv) {
                         }
                         // Switch to password phase.
                         editing_username = 0;
-                        in_password_phase = 1;
                     }
                 } else {
                     // If editing password and password is nonempty, try authentication.

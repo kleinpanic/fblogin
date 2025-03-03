@@ -13,7 +13,7 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
+BLUE='\033[1;34m'
 NC='\033[0m' # No Color
 
 # --- Check if running as root ---
@@ -238,7 +238,7 @@ if [ -f "$SOURCE_LOGO_FILE" ]; then
     chown root:root "$DEST_LOGO_FILE"
     echo -e "${GREEN}Copied fblogin logo to $DEST_LOGO_FILE and set correct permissions.${NC}"
 else
-    echo -e "${RED}Warning: $LOGO_FILE not found in $SOURCE_LOGO_FILE! Skipping copy.${NC}
+    echo -e "${RED}Warning: $LOGO_FILE not found in $SOURCE_LOGO_FILE! Skipping copy.${NC}"
 fi
 
 # --- Check and Create systemd override for getty@tty1.service ---
@@ -249,7 +249,8 @@ if [ ! -d "$OVERRIDE_DIR" ]; then
 	echo -e "${RED}This is undoable by removing the getty@tty1.service.d/override.conf file.${NC}"
 
 	while true; do
-        	read -p "${RED}Proceed? (y/n) ${NC}" proceed
+        	echo -e -n "${RED}Proceed? (y/n) ${NC}" 
+		read proceed
         	proceed=$(echo "$proceed" | tr '[:upper:]' '[:lower:]')  # Convert to lowercase
 
         	if [[ "$proceed" == "y" || "$proceed" == "yes" ]]; then

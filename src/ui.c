@@ -45,7 +45,7 @@ static void ui_draw_cmatrix_background(framebuffer_t *fb) {
         for (int x = -offset; x < fb->width; x += step) {
             char c = charset[rand() % charCount];
             char buf[2] = { c, '\0' };
-            fb_draw_text(fb, x, y, buf, 0x001100);
+            fb_draw_text(fb, x, y, buf, 0x001100, 0x000000);
         }
     }
     offset = (offset + 1) % step;
@@ -90,7 +90,8 @@ static void fb_draw_ansi_text(framebuffer_t *fb, int x, int y, const char *text)
     }
 
     buffer[buf_index] = '\0'; 
-    fb_draw_text(fb, x, y, buffer, fg);
+    fb_draw_rect(fb, x, y, buf_index * 8 * FONT_SCALE, 8 * FONT_SCALE, bg); // Draw background first
+    fb_draw_text(fb, x, y, buffer, fg, bg); // Draw text on top
 }
 
 /* Internal: Draw fblogin logo from a text file with ANSI color support */
@@ -110,7 +111,7 @@ static void ui_draw_pfp(framebuffer_t *fb, int x, int y) {
     }
 
     while (line_number < 20) {
-        fb_draw_text(fb, x, y + line_number * 8 * FONT_SCALE, " ", 0xFFFFFF);
+        fb_draw_text(fb, x, y + line_number * 8 * FONT_SCALE, " ", 0xFFFFFF, 0x000000);
         line_number++;
     }
 }
@@ -123,9 +124,9 @@ static void ui_draw_bubble_text(framebuffer_t *fb, int x, int y, const char *tex
         {-1,  1}, { 0,  1}, { 1,  1}
     };
     for (int i = 0; i < 8; i++) {
-        fb_draw_text(fb, x + offsets[i][0], y + offsets[i][1], text, outline_color);
+        fb_draw_text(fb, x + offsets[i][0], y + offsets[i][1], text, outline_color, 0x000000);
     }
-    fb_draw_text(fb, x, y, text, color);
+    fb_draw_text(fb, x, y, text, color, 0x000000);
 }
 
 /* Internal: Draw the base UI (background, title, and Debian spiral) */
@@ -165,16 +166,16 @@ void ui_draw_login(framebuffer_t *fb, const char *username, const char *password
     fb_draw_rect_outline(fb, username_box_x - 5, username_box_y - 5, box_width + 10, box_height + 10, 0xFFFFFF);
     fb_draw_rect_outline(fb, password_box_x - 5, password_box_y - 5, box_width + 10, box_height + 10, 0xFFFFFF);
     
-    fb_draw_text(fb, username_box_x, username_box_y - 20, "Username:", 0xFFFFFF);
-    fb_draw_text(fb, username_box_x, username_box_y + 5, username, 0x00FF00);
+    fb_draw_text(fb, username_box_x, username_box_y - 20, "Username:", 0xFFFFFF, 0x000000);
+    fb_draw_text(fb, username_box_x, username_box_y + 5, username, 0x00FF00, 0x000000);
     
-    fb_draw_text(fb, password_box_x, password_box_y - 20, "Password:", 0xFFFFFF);
+    fb_draw_text(fb, password_box_x, password_box_y - 20, "Password:", 0xFFFFFF, 0x000000);
     char masked[256] = {0};
     int len = strlen(password);
     for (int i = 0; i < len && i < 255; i++) {
         masked[i] = '*';
     }
-    fb_draw_text(fb, password_box_x, password_box_y + 5, masked, 0x00FF00);
+    fb_draw_text(fb, password_box_x, password_box_y + 5, masked, 0x00FF00, 0x000000);
     
     msync(fb->fb_ptr, fb->fb_size, MS_SYNC);
     fb_update_display(fb);
@@ -183,7 +184,7 @@ void ui_draw_login(framebuffer_t *fb, const char *username, const char *password
 /* Public: Draw error message screen (with base UI still visible) */
 void ui_draw_error(framebuffer_t *fb, const char *message) {
     ui_draw_base(fb, 20);
-    fb_draw_text(fb, 10, fb->height - 40, message, 0xFF0000);
+    fb_draw_text(fb, 10, fb->height - 40, message, 0xFF0000, 0x000000);
     msync(fb->fb_ptr, fb->fb_size, MS_SYNC);
     fb_update_display(fb);
 }
@@ -196,7 +197,7 @@ void ui_draw_welcome(framebuffer_t *fb, const char *username) {
     int text_width = strlen(welcome) * 8 * FONT_SCALE;
     int x = (fb->width - text_width) / 2;
     int y = 420;  // positioned a few spaces lower
-    fb_draw_text(fb, x, y, welcome, 0xFFFFFF);
+    fb_draw_text(fb, x, y, welcome, 0xFFFFFF, 0x000000);
     msync(fb->fb_ptr, fb->fb_size, MS_SYNC);
     fb_update_display(fb);
 }
@@ -207,7 +208,7 @@ void ui_draw_message(framebuffer_t *fb, const char *msg) {
     int text_width = strlen(msg) * 8 * FONT_SCALE;
     int x = (fb->width - text_width) / 2;
     int y = 420;  // message position, lower than before
-    fb_draw_text(fb, x, y, msg, 0xFFFFFF);
+    fb_draw_text(fb, x, y, msg, 0xFFFFFF, 0x000000);
     msync(fb->fb_ptr, fb->fb_size, MS_SYNC);
     fb_update_display(fb);
 }

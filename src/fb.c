@@ -86,7 +86,7 @@ void fb_draw_rect_outline(framebuffer_t *fb, int x, int y, int w, int h, uint32_
 }
 
 /* Draw text using an 8x8 bitmap scaled by FONT_SCALE */
-void fb_draw_text(framebuffer_t *fb, int x, int y, const char *text, uint32_t color) {
+void fb_draw_text(framebuffer_t *fb, int x, int y, const char *text, uint32_t fg_color, uint32_t bg_color) {
     while (*text) {
         unsigned char uc = (unsigned char)*text;
         if (uc > 127)
@@ -94,10 +94,14 @@ void fb_draw_text(framebuffer_t *fb, int x, int y, const char *text, uint32_t co
         for (int row = 0; row < 8; row++) {
             uint8_t row_data = font8x8_basic[(int)uc][row];
             for (int col = 0; col < 8; col++) {
-                if (row_data & (1 << col)) {
-                    for (int dy = 0; dy < FONT_SCALE; dy++) {
-                        for (int dx = 0; dx < FONT_SCALE; dx++) {
-                            fb_draw_pixel(fb, x + col * FONT_SCALE + dx, y + row * FONT_SCALE + dy, color);
+                for (int dy = 0; dy < FONT_SCALE; dy++) {
+                    for (int dx = 0; dx < FONT_SCALE; dx++) {
+                        int pixel_x = x + col * FONT_SCALE + dx;
+                        int pixel_y = y + row * FONT_SCALE + dy;
+                        if (row_data & (1 << col)) {
+                            fb_draw_pixel(fb, pixel_x, pixel_y, fg_color);
+                        } else {
+                            fb_draw_pixel(fb, pixel_x, pixel_y, bg_color);
                         }
                     }
                 }
@@ -107,4 +111,3 @@ void fb_draw_text(framebuffer_t *fb, int x, int y, const char *text, uint32_t co
         text++;
     }
 }
-
