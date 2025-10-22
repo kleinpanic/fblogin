@@ -1,0 +1,25 @@
+# build artifacts
+/obj/
+/fblogin
+*.o
+*.d
+
+# logs, cores, misc
+*.log
+core
+core.*
+
+# editor/OS junk
+*~
+*.swp
+*.swo
+.DS_Store
+
+# backups: files and directories ending in .bak
+*.bak
+**/*.bak
+**/*.bak/
+
+# manpage compressed variant
+man/*.gz
+

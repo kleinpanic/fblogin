@@ -1,0 +1,34 @@
+[Unit]
+Description=Framebuffer Login on %I
+Documentation=man:systemd-logind.service(8) man:logind.conf(5)
+After=systemd-user-sessions.service systemd-logind.service plymouth-quit-wait.service
+Wants=systemd-logind.service
+Conflicts=getty@%i.service
+ConditionPathExists=/dev/%I
+
+[Service]
+Environment=FBLOGIN_DEBUG=1
+Environment=FBLOGIN_LOG_FILE=/var/log/fblogin/fblogin.log
+# Bind to a real TTY
+TTYPath=/dev/%I
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+
+# Program does PAM (auth + session) itself; do NOT set PAMName here.
+# Production defaults (no debug spam; strict PAM session)
+Environment=FBLOGIN_DEBUG=0
+Environment=FBLOGIN_STRICT_SESSION=1
+# Optional: enable matrix background by flipping to 1
+# Environment=FBLOGIN_CMATRIX=1
+
+ExecStart=/usr/local/bin/fblogin
+Type=simple
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
+
