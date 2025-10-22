@@ -1,236 +1,356 @@
-# fblogin: Framebuffer-Based Graphical Login for Debian
+/¯¯¯¯/\¯¯¯¯\·. ''/¯¯¯¯/\¯¯¯¯\·. |¯¯¯¯|`·.'          '/¯¯¯¯/\¯¯¯¯\`·.''/¯¯¯¯/\¯¯¯¯\·.  |¯¯¯¯|`·.'/¯¯¯¯/`·.         
+|`·.·´`·|::'¯¯¯¯`·.\|·´`·.·´|:/____/`·.|`·.·´`·|:::'          |·´`·.·´|::|`·.·´`·|:::|`·.·´`·|:::¯¯¯¯`·.\|.·´`·.·|:::|.·´`·.·|\¯¯¯¯\`·. 
+|`·.·´`·|\¯¯¯¯\·.¨ '|·´`·.·´|:\¯¯¯¯\·./|`·.·´`·|::|¯¯¯¯|`·.|·´`·.·´|::|`·.·´`·|:::|`·.·´`·|:\¯¯¯¯\·. ¨|.·´`·.·|:::|.·´`·.·|:|`·.·´`·|:::'
+|____|::¯¯¯¯`·.\''\____\/____/`·.'\____\/____/`·.''\____\/____/`·.''\____\/____/`·. |____|:::|____|:|____|:::'
+'`·.:::::`·.¨ ¨ ¨ ¨ ¨ '  `·.::::::::::::'`·./  `·.::::::::::::'`·./' '`·.:::::::::::::`·./'  `·.::::::::::::'`·./ '`·.:::::`·.'`·.:::::`·`·.::::`·. 
 
-## **Introduction**
+# fblogin — framebuffer login for tty1
 
-fblogin is a **lightweight, framebuffer-based graphical login manager** designed for Debian systems. It replaces the standard tty1 login prompt with a visually enhanced interface utilizing the **Linux framebuffer** for graphics, **PAM** for authentication, and optional **fingerprint verification via fprintd**. The system supports:
-
-- **Direct framebuffer rendering** for a graphical login screen without X11/Wayland.
-- **Pluggable Authentication Modules (PAM)** for authentication.
-- **Fingerprint authentication** using `fprintd`.
-- **Raw terminal input processing** for an interactive TUI-style experience.
-- **Minimal system overhead**, replacing `getty` via `systemd` overrides.
-
-This document provides an exhaustive technical breakdown of `fblogin`, covering **system dependencies, low-level memory operations, device interactions, authentication flow, and graphical rendering.**
-
-## Note
-> If you use ubuntu run at ur own risk.
+Framebuffer greeter that:
+- draws directly to **fbdev** (no X/Wayland),
+- authenticates via **PAM** (optional fprintd),
+- binds a **logind** session on **tty1**,
+- execs a **real login shell** on the same VT.
 
 ---
 
-## **System Dependencies**
+## Quick start
 
-### **1. Required Header Files**
+```bash
+# Debian/Ubuntu deps
+sudo apt-get install -y build-essential libpam0g-dev libfprint-dev fprintd pkg-config
 
-`fblogin` requires both **standard C libraries** and **Linux-specific headers** for framebuffer and authentication control.
-
-#### **Standard Libraries:**
-- `<stddef.h>` – Defines `size_t` and other fundamental types.
-- `<stdint.h>` – Fixed-width integer types.
-- `<stdio.h>` – Input/output functions.
-- `<stdlib.h>` – Memory allocation, system functions.
-- `<string.h>` – String handling utilities.
-- `<time.h>` – Timing functions.
-
-#### **System-Level Libraries:**
-- `<unistd.h>` – Low-level system calls.
-- `<sys/ioctl.h>` – Device communication.
-- `<sys/mman.h>` – Memory mapping (`mmap`).
-- `<sys/types.h>` – Defines `pid_t`, `uid_t`, etc.
-- `<sys/wait.h>` – Process synchronization (`waitpid`).
-
-#### **Framebuffer Graphics:**
-- `<linux/fb.h>` – Framebuffer device control.
-- `"fb.h"` – Custom framebuffer manipulation.
-- `"font8x8_basic.h"` – Bitmap font rendering.
-
-#### **Authentication and User Management:**
-- `<security/pam_appl.h>` – PAM API for authentication.
-- `"pam_auth.h"` – Custom PAM authentication handler.
-- `<pwd.h>` – User account management.
-- `<grp.h>` – Group management.
-
-#### **Terminal Input Handling:**
-- `<termios.h>` – Raw keyboard input control.
-- `"input.h"` – Custom keyboard processing.
-
-#### **Process and Signal Management:**
-- `<signal.h>` – Signal handling.
-- `"ui.h"` – User interface logic.
-
-### **2. System Calls Used**
-
-The core functionality of `fblogin` relies on direct **syscalls** for process control, user authentication, and framebuffer manipulation.
-
-#### **File and Memory Operations:**
-- `open()` – Opens `/dev/fb0`.
-- `read()` – Reads user input.
-- `close()` – Closes descriptors.
-- `mmap()` – Maps framebuffer memory.
-- `munmap()` – Unmaps memory.
-
-#### **Process Control:**
-- `fork()` – Creates login subprocess.
-- `waitpid()` – Waits for completion.
-- `setsid()` – Creates a new session (daemon-like behavior).
-
-#### **User and Permission Management:**
-- `setuid()` – Changes user ID.
-- `setgid()` – Changes group ID.
-- `getuid()` – Retrieves user ID.
-
-#### **Framebuffer Operations:**
-- `ioctl()` – Direct framebuffer control.
-
-#### **Authentication & Fingerprint Handling:**
-- `pam_*` – PAM API functions.
-- `fprintd-verify` – Fingerprint authentication via `fprintd`.
-
----
-
-## Setup and Installation 
-1. **Clone or Download the repo**:
-```Bash
-git clone https://github.com/yourusername/fblogin.git
-cd fblogin
-```
-
-2. **Install required Dependencies**:
-on Debian you might install PAM and fprintd with: 
-```Bash
-sudo apt-get update
-sudo apt-get install libpam0g-dev fprintd libfprint-dev
-```
-
-3. **Build the project**
-The project comes with a make file and a bash script 
-```Bash
+# build + install (binary, unit, pam, banner, manpage)
 make
+sudo make install-all
+
+# logging (global file, debug on)
+sudo install -d -m 0755 /var/log/fblogin
+sudo install -m 0640 /dev/null /var/log/fblogin/fblogin.log
+sudo chown root:adm /var/log/fblogin/fblogin.log
+
+# unit env (drop-in)
+sudo systemctl edit fblogin@tty1.service
+# [Service]
+# Environment=FBLOGIN_DEBUG=1
+# Environment=FBLOGIN_LOG_FILE=/var/log/fblogin/fblogin.log
+
+# logrotate (SIGUSR1 reopen)
+sudo tee /etc/logrotate.d/fblogin >/dev/null <<'ROT'
+/var/log/fblogin/fblogin.log {
+  rotate 7
+  daily
+  missingok
+  notifempty
+  compress
+  create 0640 root adm
+  postrotate
+    systemctl kill -s SIGUSR1 fblogin@tty1.service 2>/dev/null || true
+  endscript
+}
+ROT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now fblogin@tty1.service
 ```
 
-For direct installation 
-```Bash
-make install
-```
-
-For uninstallation 
-```Bash
-make uninstall
-```
-
-4. Ensure your computer environment is propely setup 
-```Bash 
-./setup.sh
-```
-
-### Note 
-> Please create issues if any of these steps produce errors 
-
-> For your consideration: The program should be ran as root because it needs access to /dev/fb0 but ultimately it is designed to be ran by systemd
-> For your consideration: The program has a strict isolation aspect that limits the running of this program to /dev/tty1 only. This can be changed in the code base to be a different tty or entirely commented out to run on all ttys and truly override the login command for your entire computer (NOT RECOMMENDED. THIS CODE IS STILL IN DEVELOPMENT). 
+Switch to tty1, log in (fingerprint or password). You land in a login shell on tty1; start your session from there (e.g., `startx`).
 
 ---
 
-## Usage
-1. **Switch to TTY1:**
-fblogin is configured to run only on /dev/tty1. You can switch to tty1 with:
+## Contents
 
-```bash
-Ctrl+Alt+F1
+- [Scope](#scope)
+- [Features](#features)
+- [Repository layout](#repository-layout)
+- [Build/install targets](#buildinstall-targets)
+- [Systemd integration](#systemd-integration)
+- [PAM stack](#pam-stack)
+- [Authentication flow](#authentication-flow)
+- [Session model](#session-model)
+- [TTY/signals](#ttysignals)
+- [Logging modes](#logging-modes)
+- [Xauthority/startx notes](#xauthoritystartx-notes)
+- [setup.sh](#setupsh)
+- [Man page](#man-page)
+- [Security](#security)
+- [Troubleshooting](#troubleshooting)
+- [Contributing / License / Docs](#contributing--license--docs)
+
+---
+
+## Scope
+
+**Is**
+- Greeter for **tty1** using fbdev.
+- PAM client that opens a proper **logind** session.
+- Hands control to a login shell; session startup remains user-controlled.
+
+**Is not**
+- Full display manager (no seat juggling, no VT switching).
+- Compositor or X/Wayland launcher.
+- Aggressive manager of `.Xauthority` (guidance only).
+
+---
+
+## Features
+
+- **Env-aware logging**
+  - `FBLOGIN_DEBUG=1` toggles debug.
+  - `FBLOGIN_LOG_FILE=…` pins a global log file (no per-user switch).
+  - `SIGUSR1` reopens the forced log (for logrotate).
+- **CLI**
+  - `--help`, `--version` (from `include/version.h`)
+  - `--log-file=/path` (implies debug; pins logging)
+  - `--no-fp`, `--fp-max=N` (UI hint; PAM remains authoritative)
+  - `--dev` (relax in-session guard), `--debug`
+- **Greeter keeper**
+  - Greeter PAM session in a child, held open until auth, then closed.
+- **sd-login diagnostics** (if linked with libsystemd)
+- **Self-pipe signal wakeups** (no SA_RESTART surprises)
+
+---
+
+## Repository layout
+
+```
+include/
+  config.h  fb.h  input.h  pam_auth.h  ui.h  version.h
+man/
+  fblogin.1
+src/
+  fb.c  input.c  pam_auth.c  ui.c  main.c
+system/
+  systemd/fblogin@.service
+  pamd/fblogin
+  issue/issue.fblogin
+docs/
+  ARCHITECTURE.md  CHANGELOG.md  Contributing.md  TODO.md
+Makefile
+setup.sh
+README.md
 ```
 
-2. **Run fblogin as Root:**
-```bash
-    sudo ./fblogin
-``` 
+---
 
-3. **Login Process:** 
-* Username Entry:
-	* The login screen initially displays an input field for the username. Type your username.
-* Toggle Fields with Tab:
-	* Press Tab to switch between the username and password fields.
-* Fingerprint Authentication:
-	* If a fingerprint reader is detected (fprintd-list is available), the program will attempt fingerprint authentication as soon as the username is entered.
-        * If fingerprint authentication fails, it falls back to the password entry.
-* Password Entry:
-        * When editing the password field, type your password and press Enter to authenticate.
-* Ctrl‑D:
-        * Pressing Ctrl‑D will clear both fields and restart the login prompt.
-* Post-Authentication:
-	* On successful authentication, fblogin will adjust tty permissions, set environment variables (such as HOME, USER, SHELL), and then launch the user's shell as a login shell.
+## Build/install targets
 
-### Troubleshooting
+Variables:
+- `PREFIX=/usr/local` (default)
+- `BINDIR=$(PREFIX)/bin`
+- `MANPREFIX=$(PREFIX)/share/man`, `MAN1DIR=$(MANPREFIX)/man1`
+- `ISSUE_FILE=system/issue/issue.fblogin`
 
-1. Framebuffer Initialization:
-If you encounter an error initializing the framebuffer (/dev/fb0), ensure your user has the correct permissions or that the framebuffer device exists.
+Targets:
+```make
+make                 # build
+make debug|release|asan
 
-2. Input Device Issues:
-If no input is detected, verify that the keyboard input library is properly set up and that /dev/tty1 is active.
+sudo make install            # binary (4755)
+sudo make install-systemd    # unit
+sudo make install-pam        # /etc/pam.d/fblogin
+sudo make install-issue      # /etc/issue.fblogin (optional)
+sudo make install-man        # manpage
+sudo make install-all        # all above
 
-3. Fingerprint Reader Issues:
-Make sure that fprintd-list and fprintd-verify are installed, executable, and that your fingerprint sensor is supported by the fprintd library.
+sudo make uninstall
+sudo make uninstall-systemd
+sudo make uninstall-pam
+sudo make uninstall-issue
+sudo make uninstall-man
+sudo make uninstall-all
+```
+
+Uninstall is symmetric with defaults. If you changed `PREFIX`/`MAN*`, pass the same values to uninstall.
 
 ---
 
-## **System Architecture**
+## Systemd integration
 
-### **1. Authentication Flow (PAM + fprintd)**
+Installed unit (`system/systemd/fblogin@.service`):
 
-1. The program **initializes PAM** with `pam_start("fblogin", username, &conv, &pamh)`.
-2. If **fingerprint authentication is enabled**, `fprintd-list` checks for stored fingerprints.
-3. If **a fingerprint is found**, `fprintd-verify` is called and its output determines success.
-4. If **fingerprint authentication fails**, the system **falls back to password login**.
-5. Upon successful authentication, `pam_acct_mgmt()` verifies **account validity**.
-6. If approved, `pam_open_session()` starts a session and `execv()` spawns the user's shell.
+```ini
+[Unit]
+Description=Framebuffer Login on %I
+Documentation=man:systemd-logind.service(8) man:logind.conf(5)
+After=systemd-user-sessions.service plymouth-quit-wait.service
+Conflicts=getty@%i.service
+ConditionPathExists=/dev/%I
 
-### **2. Framebuffer Rendering Pipeline**
+[Service]
+TTYPath=/dev/%I
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
 
-1. The framebuffer device `/dev/fb0` is **opened with `open()`**.
-2. `ioctl(FBIOGET_VSCREENINFO)` retrieves **display dimensions**.
-3. `mmap()` maps framebuffer memory for **direct pixel access**.
-4. The screen is **cleared to black** using `memset()`.
-5. An **8×8 bitmap font** is rendered with `font8x8_basic.h` and **scaling factors**.
-6. The **Debian logo (PFP) is drawn at the center** using per-pixel transformations.
-7. The **cmatrix animation (if enabled) updates the background** dynamically.
+PAMName=fblogin
+UtmpIdentifier=%I
+UtmpMode=user
 
-### **3. Terminal Input Handling**
+ExecStart=/usr/local/bin/fblogin
+Type=simple
+Restart=always
+RestartSec=1
 
-1. `termios` switches tty **to raw mode** (`ECHO` and `ICANON` disabled).
-2. Keypresses are read **one character at a time** using `read()`.
-3. **Backspace is handled manually** by clearing screen regions.
-4. On `Enter`, the input is **validated and passed to PAM**.
-5. If **Ctrl+C is pressed**, `fblogin` exits immediately.
+[Install]
+WantedBy=multi-user.target
+```
 
-### **4. System Integration (Replacing getty via systemd)**
+Recommended drop-in:
 
-1. `fblogin` replaces `getty` using a **systemd override**:
-   ```ini
-   [Service]
-   ExecStart=/usr/local/bin/fblogin
-   ```
-2. `setsid()` ensures `fblogin` runs as a **session leader**.
-3. After login, `execv()` **spawns the user shell** (e.g., `/bin/bash`).
+```ini
+[Service]
+Environment=FBLOGIN_DEBUG=1
+Environment=FBLOGIN_LOG_FILE=/var/log/fblogin/fblogin.log
+```
+
+Logrotate:
+
+```conf
+/var/log/fblogin/fblogin.log {
+  rotate 7
+  daily
+  missingok
+  notifempty
+  compress
+  create 0640 root adm
+  postrotate
+    systemctl kill -s SIGUSR1 fblogin@tty1.service 2>/dev/null || true
+  endscript
+}
+```
 
 ---
 
-## **Security Considerations**
+## PAM stack
 
-- **Direct framebuffer access** is only possible for root; `fblogin` runs with **setuid-root**.
-- **PAM sessions are properly closed** via `pam_close_session()`.
-- **No passwords are stored**; authentication is handled via PAM modules.
-- **SIGINT/SIGTERM handling** ensures graceful exit.
+`/etc/pam.d/fblogin`:
+
+```
+auth     include   common-auth
+account  include   common-account
+password include   common-password
+
+session  required  pam_env.so
+session  required  pam_loginuid.so
+session  include   common-session
+session  required  pam_systemd.so
+```
+
+- `pam_loginuid.so` sets `/proc/self/loginuid`.
+- `pam_systemd.so` registers the session with logind.
 
 ---
 
-## **Future Improvements**
+## Authentication flow
 
-- **Dynamic resolution scaling** (currently, framebuffer dimensions are fixed at launch).
-- **DRM/KMS support** to replace **legacy fbdev**.
-- **Enhanced cmatrix animations** with smoother transitions.
+- Username field first; `Tab` toggles focus.
+- If password is empty and fingerprints are enabled, try the **fingerprint** path via PAM.
+- On success: welcome screen → stop greeter keeper → exec user’s login shell.
+- On failure: prompt for password and proceed via PAM.
+
+Disable fingerprints:
+- `--no-fp` or `FBLOGIN_FINGERPRINT=0`.
 
 ---
 
-## **Conclusion**
+## Session model
 
-`fblogin` is a **high-performance framebuffer-based login manager** that integrates with PAM authentication and fingerprint recognition. It is a lightweight alternative to graphical login managers, optimized for minimalism and direct hardware interaction.
+- Runs on **tty1** (`TTYPath` + `UtmpMode=user`).
+- Opens the user **PAM** session; logind sees `CLASS=user TYPE=tty`.
+- Drops to user’s uid/gid, sets `HOME/SHELL/USER/LOGNAME` (+ fallback `PATH`), execs the login shell with `-l`.
+- Start the graphical session from that shell (e.g., `startx`).
 
+---
+
+## TTY/signals
+
+- `SIGTERM`: graceful shutdown via self-pipe to break `poll(2)`.
+- `SIGUSR1`: reopen forced log file.
+- `SIGINT`, `SIGQUIT`, `SIGTSTP`: ignored.
+
+Keys:
+- `Tab` toggle focus, `Ctrl-U` clear focused field, `Ctrl-R` reset both, `Ctrl-D` restart greeter UI.
+
+---
+
+## Logging modes
+
+- **Default**: pre-user logs to `/tmp/fblogin-$pid.log`; after username known, switch to `$HOME/.fblogin.log` (600, chowned).
+- **Forced global**: set `FBLOGIN_LOG_FILE=/var/log/fblogin/fblogin.log` or pass `--log-file=/path`. Remains on that file and never switches. `SIGUSR1` triggers reopen. Requires `FBLOGIN_DEBUG=1` or `--debug` (implied by `--log-file`).
+
+---
+
+## Xauthority/startx notes
+
+Do not export `XAUTHORITY` globally in `~/.zshenv`.
+
+If keeping Xauthority under `XDG_RUNTIME_DIR` **only on tty1**, add to `~/.config/zsh/.zlogin`:
+
+```zsh
+if [[ -z "$DISPLAY" && -z "$SSH_TTY" && "$(tty)" == "/dev/tty1" ]]; then
+  if [[ -n "$XDG_RUNTIME_DIR" && -O "$XDG_RUNTIME_DIR" ]]; then
+    AUTH="${XDG_RUNTIME_DIR}/x11/Xauthority"
+    install -d -m 700 -- "${AUTH:h}"
+    if [[ ! -L "$HOME/.Xauthority" || "$(readlink -f "$HOME/.Xauthority" 2>/dev/null)" != "$AUTH" ]]; then
+      rm -f -- "$HOME/.Xauthority"
+      ln -s -- "$AUTH" "$HOME/.Xauthority"
+    fi
+    # exec startx    # optional
+  fi
+fi
+```
+
+`~/.xinitrc` should not hard-set `XAUTHORITY`; let `xinit/xauth` manage cookies. It can export env to user services if needed.
+
+---
+
+## setup.sh
+
+Automates:
+- PAM file write,
+- unit install,
+- removal of conflicting `getty@tty1` override,
+- disabling getty on tty1/tty2,
+- enabling `fblogin@tty1`,
+- basic verification.
+
+Run with root: `sudo ./setup.sh`.
+
+---
+
+## Man page
+
+Install via `make install-man`, then `man fblogin`.
+
+---
+
+## Security
+
+- Binary is **setuid root** (4755).
+- PAM handles credentials; we don’t store them.
+- Greeter session isolated; user session opened/closed explicitly.
+- Minimal signal surface; blocking calls interrupted safely.
+
+---
+
+## Troubleshooting
+
+- **stdin is not a TTY**: start via `fblogin@tty1.service` on a VT.
+- **PAM session failed (TTY busy / inside a session)**: use a free VT; don’t launch inside an existing session unless `--dev`.
+- **polkit prompts missing**: ensure DE/WM started from the tty-backed session (`loginctl` should show `TYPE=tty`).
+- **fingerprint never matches**: enroll with `fprintd-enroll`, confirm sensor support; disable with `--no-fp` if needed.
+- **logs break after rotation**: use the provided logrotate and `SIGUSR1` reopen; ensure forced global logging is configured.
+- **no /dev/fb0**: fbdev not exposed; current code targets fbdev, not DRM/KMS.
+
+---
+
+## Contributing / License / Docs
+
+- Contribution guide: `docs/Contributing.md`
+- Architecture notes: `docs/ARCHITECTURE.md`
+- Changelog: `docs/CHANGELOG.md`
+- License: `LICENSE`
 

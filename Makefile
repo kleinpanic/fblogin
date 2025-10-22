@@ -13,6 +13,12 @@ ISSUE_DIR  ?= system/issue
 ISSUE_FILE ?= $(ISSUE_DIR)/issue.fblogin
 ISSUE_DEST ?= /etc/issue.fblogin
 
+# Manpage install defaults
+MANPREFIX ?= $(PREFIX)/share/man
+MAN1DIR   ?= $(MANPREFIX)/man1
+MAN1PAGES ?= man/fblogin.1
+MAN1NAME  := $(notdir $(MAN1PAGES))
+
 # Compiler/Linker
 CC       := gcc
 CPPFLAGS := -I$(INC_DIR) -D_GNU_SOURCE -MMD -MP
@@ -86,7 +92,7 @@ install-man:
 	install -m 0644 $(MAN1PAGES) $(DESTDIR)$(MAN1DIR)/
 	@# gzip if available, keep original if not
 	@if command -v gzip >/dev/null 2>&1; then \
-	  gzip -9nf $(DESTDIR)$(MAN1DIR)/fblogin.1; \
+	  gzip -9nf $(DESTDIR)$(MAN1DIR)/$(MAN1NAME); \
 	fi
 
 # Convenience: install everything we ship
@@ -107,7 +113,7 @@ uninstall-issue:
 	rm -f $(DESTDIR)$(ISSUE_DEST)
 
 uninstall-man:
-	rm -f $(DESTDIR)$(MAN1DIR)/fblogin.1 $(DESTDIR)$(MAN1DIR)/fblogin.1.gz
+	rm -f $(DESTDIR)$(MAN1DIR)/$(MAN1NAME) $(DESTDIR)$(MAN1DIR)/$(MAN1NAME).gz
 
 uninstall-all: uninstall uninstall-systemd uninstall-pam uninstall-issue uninstall-man
 

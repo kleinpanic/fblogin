@@ -31,6 +31,10 @@
 #include <systemd/sd-login.h>
 #endif
 
+/* forward decls */
+static void print_help(const char *argv0);
+static void print_version(void);
+
 /* ---------- debug logger ---------- */
 static FILE *g_log = NULL;
 static int debug_enabled = 0;
@@ -38,7 +42,7 @@ static char g_log_path[512] = {0};
 /* when nonzero, we pin logs to a specific file and never switch to per-user */
 static int  g_log_forced = 0;
 static char g_log_forced_path[512] = {0};
-
+static void log_reopen_if_forced(void);
 
 static void ts_now(char *buf, size_t n) {
 #if FBLOGIN_LOG_TIMESTAMP
@@ -66,6 +70,18 @@ static void dlog(const char *fmt, ...) {
     fputc('\n', g_log);
     fflush(g_log);
     va_end(ap);
+}
+
+static void log_reopen_if_forced(void) {
+    if (!debug_enabled || !g_log_forced || !g_log_forced_path[0]) return;
+    FILE *old = g_log;
+    g_log = NULL;
+    if (old) fclose(old);
+    int fd = open(g_log_forced_path, O_CREAT|O_APPEND|O_WRONLY, 0640);
+    if (fd < 0) { g_log = old; return; }
+    FILE *nf = fdopen(fd, "a");
+    if (!nf) { close(fd); g_log = old; return; }
+    g_log = nf; snprintf(g_log_path, sizeof(g_log_path), "%s", g_log_forced_path);
 }
 
 /* open an explicit path for logging (used by forced global log mode) */
@@ -163,6 +179,12 @@ static void install_signal_handlers(void) {
     sigaction(SIGINT,  &ign, NULL);  /* ^C */
     sigaction(SIGTSTP, &ign, NULL);  /* ^Z */
     sigaction(SIGQUIT, &ign, NULL);  /* ^\ */
+
+    /* SIGUSR1 from logrotate -> reopen forced log file */
+    struct sigaction hup;
+    memset(&hup, 0, sizeof(hup));
+    hup.sa_handler = (void (*)(int))log_reopen_if_forced;
+    sigaction(SIGUSR1, &hup, NULL);
 }
 
 /* ---------- helpers ---------- */
@@ -368,11 +390,41 @@ static void stop_greeter_keeper(void) {
     }
 }
 
+/* ---------- CLI helpers ---------- */
+static void print_version(void) {
+    /* FBLOGIN_VERSION comes from version.h */
+    printf("fblogin %s\n", FBLOGIN_VERSION);
+}
+
+static void print_help(const char *argv0) {
+    const char *prog = argv0 ? argv0 : "fblogin";
+    printf(
+        "Usage: %s [options]\n"
+        "\n"
+        "Options:\n"
+        "  -h, --help            Show this help and exit\n"
+        "  -V, --version         Show version and exit\n"
+        "  -d, --debug           Enable debug logging (can also set FBLOGIN_DEBUG=1)\n"
+        "      --dev             Developer mode (relaxes some context checks)\n"
+        "      --no-fp           Disable fingerprint path\n"
+        "      --fp-max=N        Cosmetic max retries shown for fingerprint (1..9)\n"
+        "      --log-file=PATH   Force all logs to PATH (implies --debug)\n"
+        "\n"
+        "Environment:\n"
+        "  FBLOGIN_DEBUG=1          enable debug logs\n"
+        "  FBLOGIN_LOG_FILE=/path   force global log file (pair with DEBUG=1)\n"
+        "  FBLOGIN_FINGERPRINT=0    disable fingerprint\n"
+        "  FBLOGIN_DEV=1            enable developer mode\n"
+        "  FBLOGIN_CMATRIX=1        enable cmatrix background\n"
+        "\n", prog);
+}
+
 /* ---------- main ---------- */
 int main(int argc, char **argv) {
     int dev_mode = 0;
     int fp_enabled = FBLOGIN_WITH_FPRINTD;
     int fp_max = 3; /* cosmetic; PAM module controls real retries */
+    int show_help = 0, show_version = 0;
 
     /* allow --log-file=/path to also imply debug on */
     /* (systemd env FBLOGIN_DEBUG=1 still supported/used below) */
@@ -395,7 +447,16 @@ int main(int argc, char **argv) {
                 debug_enabled = 1; /* make --log-file alone sufficient */
             }
         }
+        else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
+            show_help = 1;
+        }
+        else if (!strcmp(argv[i], "--version") || !strcmp(argv[i], "-V")) {
+            show_version = 1;
+        }
     }
+    if (show_help)    { print_help(argv[0]);    return 0; }
+    if (show_version) { print_version();        return 0; }
+
     if (!debug_enabled) {
         const char *env = getenv("FBLOGIN_DEBUG");
         if (env && *env == '1') debug_enabled = 1;
